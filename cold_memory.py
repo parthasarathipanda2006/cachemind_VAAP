@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SearchResult:
     """Represents a search result from BM25 retrieval."""
-    doc_id: str
+    id: int
     text: str
     score: float
 
@@ -42,16 +42,17 @@ class ColdStorage:
             password: MySQL password
             database: MySQL database name
         """
-        self.host ="localhost"
-        self.user ="root"
+        self.host = "localhost"
+        self.user = "root"
         self.password = "root"
-        self.database ="cold_storage"
+        self.database = "cold_storage"
         self.connection = None
         self.cursor = None
         self.bm25_index = None
-        self.documents = []  # List of (doc_id, text) tuples
-        self.doc_id_to_index = {}  # Map doc_id to index in documents list
+        self.documents = []  # List of (id, text) tuples
+        self.id_to_index = {}  # Map id to index in documents list
         self.needs_index_rebuild = True
+        self.nlp = spacy.load("en_core_web_sm")
 
         self._connect()
         self._create_table()
@@ -77,12 +78,11 @@ class ColdStorage:
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS documents (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                doc_id VARCHAR(255),
                 text TEXT NOT NULL,
                 access_count INT DEFAULT 0,
                 last_accessed DOUBLE
-            );
-            """)
+                );
+                """)
             self.connection.commit()
             logger.info("Documents table ensured")
         except mysql.connector.Error as err:
@@ -91,6 +91,8 @@ class ColdStorage:
             raise
 
     def _tokenize(self, text: str) -> List[str]:
+    
+       
         """
         Simple tokenization: split by non-alphanumeric characters and convert to lowercase.
 
@@ -100,9 +102,15 @@ class ColdStorage:
         Returns:
             List of tokens
         """
-        nlp = spacy.load("en_core_web_sm")
-        docs=nlp(text.lower())
-        tokens=[token.lemma_ for token in docs]
+        
+        docs=self.nlp(text.lower())
+        tokens =[
+                    token.lemma_
+                    for token in docs
+                    if not token.is_stop
+                    and not token.is_punct
+                    and not token.is_space
+                ]
         return  tokens
         # # Convert to lowercase and split by non-alphanumeric characters
         # tokens = re.findall(r'\b\w+\b', text.lower())
@@ -110,27 +118,30 @@ class ColdStorage:
 
     def _rebuild_index(self):
         """Rebuild the BM25 index from current documents in the database."""
+
+        print("STARTING BM25 REBUILD")
         try:
             # Fetch all documents from database
-            self.cursor.execute("SELECT doc_id, text FROM documents")
+            self.cursor.execute("SELECT id, text FROM documents")
             rows = self.cursor.fetchall()
 
             if not rows:
                 self.documents = []
-                self.doc_id_to_index = {}
                 self.bm25_index = None
                 self.needs_index_rebuild = False
                 logger.info("Index rebuilt: no documents found")
                 return
 
             # Update internal document list and mapping
-            self.documents = rows  # List of (doc_id, text)
-            self.doc_id_to_index = {doc_id: idx for idx, (doc_id, _) in enumerate(rows)}
+            self.documents = rows  # List of (id, text)
+            self.id_to_index = {id: idx for idx, (id, _) in enumerate(rows)}
 
             # Tokenize all documents
+            print("Tokenizing")
             tokenized_docs = [self._tokenize(text) for _, text in rows]
 
             # Build BM25 index
+            print("BUILDING BM25...")
             self.bm25_index = BM25Okapi(tokenized_docs)
             self.needs_index_rebuild = False
             logger.info(f"Index rebuilt with {len(rows)} documents")
@@ -139,105 +150,107 @@ class ColdStorage:
             logger.error(f"Failed to rebuild index: {err}")
             raise
 
-    def add_document(self, doc_id: str, text: str):
+    def add_document(self, text: str) -> int:
         """
         Add a new document to the storage.
 
         Args:
-            doc_id: Unique identifier for the document
             text: Document text content
+
+        Returns:
+            int: The auto-generated id of the inserted document
         """
         try:
             self.cursor.execute(
-                """INSERT INTO documents (doc_id, text, access_count, last_accessed)
-                   VALUES (%s, %s, %s, %s)""",
-                (doc_id, text, 0, time.time())
+                "INSERT INTO documents (text, access_count, last_accessed) VALUES (%s, %s, %s)",
+                (text, 0, time.time())
             )
+            doc_id = self.cursor.lastrowid
             self.connection.commit()
             self.needs_index_rebuild = True
             logger.info(f"Added document: {doc_id}")
+            return doc_id
         except mysql.connector.Error as err:
-            logger.error(f"Failed to add document {doc_id}: {err}")
+            logger.error(f"Failed to add document: {err}")
             self.connection.rollback()
             raise
 
-    def get_document(self, doc_id: str) -> Optional[str]:
+    def get_document(self, id: int) -> Optional[str]:
         """
         Retrieve a document by its ID.
 
         Args:
-            doc_id: Document identifier
+            id: Document identifier
 
         Returns:
             Document text if found, None otherwise
         """
         try:
             self.cursor.execute(
-                "SELECT text FROM documents WHERE doc_id = %s",
-                (doc_id,)
+                "SELECT text FROM documents WHERE id = %s",
+                (id,)
             )
             result = self.cursor.fetchone()
             if result:
                 return result[0]
             return None
         except mysql.connector.Error as err:
-            logger.error(f"Failed to get document {doc_id}: {err}")
+            logger.error(f"Failed to get document {id}: {err}")
             return None
 
-    def get_all_documents(self) -> List[Tuple[str, str]]:
+    def get_all_documents(self) -> List[Tuple[int, str]]:
         """
         Retrieve all documents from storage.
 
         Returns:
-            List of (doc_id, text) tuples
+            List of (id, text) tuples
         """
         try:
-            self.cursor.execute("SELECT doc_id, text FROM documents")
+            self.cursor.execute("SELECT id, text FROM documents")
             return self.cursor.fetchall()
         except mysql.connector.Error as err:
             logger.error(f"Failed to get all documents: {err}")
             return []
 
-    def update_access_stats(self, doc_id: str):
+    def update_access_stats(self, id: int):
         """
         Update access statistics for a document.
 
         Args:
-            doc_id: Document identifier
+            id: Document identifier
         """
         try:
             self.cursor.execute(
                 """UPDATE documents
                    SET access_count = access_count + 1,
                        last_accessed = %s
-                   WHERE doc_id = %s""",
-                (time.time(), doc_id)
+                   WHERE id = %s""",
+                (time.time(), id)
             )
             self.connection.commit()
-            logger.debug(f"Updated access stats for document: {doc_id}")
+            logger.debug(f"Updated access stats for document: {id}")
         except mysql.connector.Error as err:
-            logger.error(f"Failed to update access stats for {doc_id}: {err}")
+            logger.error(f"Failed to update access stats for {id}: {err}")
             self.connection.rollback()
 
-    def delete_document(self, doc_id: str):
+    def delete_document(self, id: int):
         """
         Delete a document from storage.
 
         Args:
-            doc_id: Document identifier
+            id: Document identifier
         """
         try:
             self.cursor.execute(
-                "DELETE FROM documents WHERE doc_id = %s",
-                (doc_id,)
+                "DELETE FROM documents WHERE id = %s",
+                (id,)
             )
             self.connection.commit()
             self.needs_index_rebuild = True
-            logger.info(f"Deleted document: {doc_id}")
+            logger.info(f"Deleted document: {id}")
         except mysql.connector.Error as err:
-            logger.error(f"Failed to delete document {doc_id}: {err}")
+            logger.error(f"Failed to delete document {id}: {err}")
             self.connection.rollback()
-            raise
 
     def search_bm25(self, query: str, top_k: int = 5) -> List[SearchResult]:
         """
@@ -266,6 +279,7 @@ class ColdStorage:
             return []
 
         # Get BM25 scores
+       
         scores = self.bm25_index.get_scores(tokenized_query)
 
         # Get top-k indices (highest scores first)
@@ -279,10 +293,11 @@ class ColdStorage:
                 score = float(scores[idx])
                 # Update access statistics for this document
                 self.update_access_stats(doc_id)
-                results.append(SearchResult(doc_id=doc_id, text=text, score=score))
+                results.append(SearchResult(id=doc_id, text=text, score=score))
 
         logger.info(f"BM25 search returned {len(results)} results for query: '{query[:50]}...'")
         return results
+
     def delete_table(self):
         try:
             self.cursor.execute("DROP TABLE IF EXISTS documents")
@@ -291,6 +306,7 @@ class ColdStorage:
         except mysql.connector.Error as err:
             print(f"Error deleting table: {err}")
             self.connection.rollback()
+
     def close(self):
         """Close database connection and cursor."""
         if self.cursor:
