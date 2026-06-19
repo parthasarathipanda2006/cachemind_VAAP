@@ -1,6 +1,6 @@
-from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader
+from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from cold_memory import ColdStorage
+from cold_storage import ColdStorage
 from hot_storage import HotStorage
 
 cold_storage = ColdStorage(
@@ -14,14 +14,14 @@ cold_storage = ColdStorage(
 loader = DirectoryLoader(
     "./documents",
     glob="*.pdf",
-    loader_cls=PyPDFLoader
+    loader_cls=PyMuPDFLoader
 )
 
 documents = loader.load()
 
 splitter = RecursiveCharacterTextSplitter(
-    chunk_size=400,
-    chunk_overlap=40
+    chunk_size=800,
+    chunk_overlap=100
 )
 
 chunks = splitter.split_documents(documents)

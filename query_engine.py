@@ -1,5 +1,5 @@
 from hot_storage import HotStorage
-from cold_memory import ColdStorage
+from cold_storage import ColdStorage
 from embedding_model import embedding_model
 from policy import LRUPolicy
 
@@ -17,7 +17,7 @@ hot_storage = HotStorage(
 
 # Initialize LRU policy with a maximum cache size (e.g., 100 documents)
 # This size can be adjusted as needed
-policy = LRUPolicy(max_cache_size=100)
+policy = LRUPolicy(max_cache_size=10)
 
 while True:
     query = input("tell me your Query:\n")
@@ -53,6 +53,7 @@ while True:
             continue
         for result in cold_results[:5]:
         # Take the top retrieved document (as per original logic)
+            print("\n",result.score,"\n")
             top_doc = result
             doc_id = str(top_doc.id)
             doc_text = top_doc.text
@@ -76,10 +77,6 @@ while True:
                 policy.admit(doc_id)
                 print(f"Admitted new document: {doc_id}")
 
-        # Print all cold results (as per original logic)
-        for result in cold_results:
-            print(result.text)
-
     # Final search to display results (keeping original logic for compatibility)
     result = hot_storage.search(
         query=query,
@@ -87,15 +84,8 @@ while True:
     )
     k = False
     for i, res in enumerate(result, 1):
-        if res["similarity"] > 0.3:
-            k = True
+        if res["similarity"] > 0.5:
             print(f"{i}. ID: {res['id']}")
             print(f"   Text: {res['text']}")
             print(f"   similarity: {res['similarity']}")
-            print()
-    if k == False:
-        print("CACHE_MISS")
-    else:
-        print("CACHE_HIT")
-    k = False
 cold_storage.close()

@@ -68,14 +68,6 @@ class HotStorage:
         self.collection.delete(ids=[doc_id])
 
     def document_exists(self, doc_id: str) -> bool:
-        """
-        Check if a document exists in hot storage by its ID.
-
-        Args:
-            doc_id: ID of the document to check.
-
-        Returns:
-            True if document exists, False otherwise.
-        """
+      
         results = self.collection.get(ids=[doc_id], include=[])
         return len(results['ids']) > 0

@@ -14,34 +14,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SearchResult:
-    """Represents a search result from BM25 retrieval."""
     id: int
     text: str
     score: float
 
 
 class ColdStorage:
-    """
-    A cold storage layer for documents with BM25-based retrieval.
-
-    Features:
-    - MySQL backend for persistent storage
-    - In-memory BM25 index for fast retrieval
-    - Automatic index rebuild on document additions/deletions
-    - Access statistics tracking
-    - Proper connection and resource management
-    """
-
+   
     def __init__(self, host: str, user: str, password: str, database: str):
-        """
-        Initialize the ColdStorage instance and establish database connection.
-
-        Args:
-            host: MySQL host address
-            user: MySQL username
-            password: MySQL password
-            database: MySQL database name
-        """
+     
         self.host = "localhost"
         self.user = "root"
         self.password = "root"
@@ -91,30 +72,10 @@ class ColdStorage:
             raise
 
     def _tokenize(self, text: str) -> List[str]:
-    
-       
-        """
-        Simple tokenization: split by non-alphanumeric characters and convert to lowercase.
-
-        Args:
-            text: Input text to tokenize
-
-        Returns:
-            List of tokens
-        """
         
-        docs=self.nlp(text.lower())
-        tokens =[
-                    token.lemma_
-                    for token in docs
-                    if not token.is_stop
-                    and not token.is_punct
-                    and not token.is_space
-                ]
-        return  tokens
-        # # Convert to lowercase and split by non-alphanumeric characters
-        # tokens = re.findall(r'\b\w+\b', text.lower())
-        # return tokens
+        # Convert to lowercase and split by non-alphanumeric characters
+        tokens = re.findall(r'\b\w+\b', text.lower())
+        return tokens
 
     def _rebuild_index(self):
         """Rebuild the BM25 index from current documents in the database."""
@@ -151,15 +112,7 @@ class ColdStorage:
             raise
 
     def add_document(self, text: str) -> int:
-        """
-        Add a new document to the storage.
 
-        Args:
-            text: Document text content
-
-        Returns:
-            int: The auto-generated id of the inserted document
-        """
         try:
             self.cursor.execute(
                 "INSERT INTO documents (text, access_count, last_accessed) VALUES (%s, %s, %s)",
@@ -176,15 +129,7 @@ class ColdStorage:
             raise
 
     def get_document(self, id: int) -> Optional[str]:
-        """
-        Retrieve a document by its ID.
-
-        Args:
-            id: Document identifier
-
-        Returns:
-            Document text if found, None otherwise
-        """
+ 
         try:
             self.cursor.execute(
                 "SELECT text FROM documents WHERE id = %s",
@@ -199,12 +144,7 @@ class ColdStorage:
             return None
 
     def get_all_documents(self) -> List[Tuple[int, str]]:
-        """
-        Retrieve all documents from storage.
-
-        Returns:
-            List of (id, text) tuples
-        """
+       
         try:
             self.cursor.execute("SELECT id, text FROM documents")
             return self.cursor.fetchall()
@@ -213,12 +153,7 @@ class ColdStorage:
             return []
 
     def update_access_stats(self, id: int):
-        """
-        Update access statistics for a document.
-
-        Args:
-            id: Document identifier
-        """
+        
         try:
             self.cursor.execute(
                 """UPDATE documents
@@ -234,12 +169,7 @@ class ColdStorage:
             self.connection.rollback()
 
     def delete_document(self, id: int):
-        """
-        Delete a document from storage.
-
-        Args:
-            id: Document identifier
-        """
+       
         try:
             self.cursor.execute(
                 "DELETE FROM documents WHERE id = %s",
@@ -253,16 +183,7 @@ class ColdStorage:
             self.connection.rollback()
 
     def search_bm25(self, query: str, top_k: int = 5) -> List[SearchResult]:
-        """
-        Search documents using BM25 ranking.
-
-        Args:
-            query: Search query string
-            top_k: Number of results to return (default: 5)
-
-        Returns:
-            List of SearchResult objects sorted by score (descending)
-        """
+     
         # Rebuild index if needed
         if self.needs_index_rebuild:
             self._rebuild_index()
@@ -273,7 +194,16 @@ class ColdStorage:
             return []
 
         # Tokenize query
-        tokenized_query = self._tokenize(query)
+        print("QUERY TOKENS:")
+        docs=self.nlp(query.lower())
+        tokens =[
+                    token.lemma_
+                    for token in docs
+                    if not token.is_stop
+                    and not token.is_punct
+                    and not token.is_space
+                ]
+        tokenized_query =tokens
         if not tokenized_query:
             logger.warning("Query tokenized to empty list")
             return []
@@ -293,7 +223,8 @@ class ColdStorage:
                 score = float(scores[idx])
                 # Update access statistics for this document
                 self.update_access_stats(doc_id)
-                results.append(SearchResult(id=doc_id, text=text, score=score))
+                if score>0:
+                    results.append(SearchResult(id=doc_id, text=text, score=score))
 
         logger.info(f"BM25 search returned {len(results)} results for query: '{query[:50]}...'")
         return results
