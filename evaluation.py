@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import argparse
 from core.cold_storage import ColdStorage
 from core.hot_storage import HotStorage
-from core.policy import LRUPolicy
+from core.policy import LRUPolicy,LFUPolicy
 from core.embedding_model import embedding_model
 
 # 1. Query Pool
