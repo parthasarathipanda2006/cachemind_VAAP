@@ -1,7 +1,7 @@
-from hot_storage import HotStorage
-from cold_storage import ColdStorage
-from embedding_model import embedding_model
-from policy import LRUPolicy
+from core.hot_storage import HotStorage
+from core.cold_storage import ColdStorage
+from core.embedding_model import embedding_model
+from core.policy import LRUPolicy
 
 # Initialize storages
 cold_storage = ColdStorage(

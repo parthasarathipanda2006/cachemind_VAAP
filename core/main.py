@@ -1,7 +1,7 @@
 from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from cold_storage import ColdStorage
-from hot_storage import HotStorage
+from core.cold_storage import ColdStorage
+from core.hot_storage import HotStorage
 
 cold_storage = ColdStorage(
     host="localhost",

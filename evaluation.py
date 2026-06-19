@@ -2,10 +2,10 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import argparse
-from cold_storage import ColdStorage
-from hot_storage import HotStorage
-from policy import LRUPolicy
-from embedding_model import embedding_model
+from core.cold_storage import ColdStorage
+from core.hot_storage import HotStorage
+from core.policy import LRUPolicy
+from core.embedding_model import embedding_model
 
 # 1. Query Pool
 QUERY_POOL = [
