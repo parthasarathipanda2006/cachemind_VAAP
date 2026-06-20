@@ -196,14 +196,14 @@ class ColdStorage:
         # Tokenize query
         print("QUERY TOKENS:")
         docs=self.nlp(query.lower())
-        tokens =[
-                    token.lemma_
-                    for token in docs
-                    if not token.is_stop
-                    and not token.is_punct
-                    and not token.is_space
-                ]
+        tokens = []
+        for token in docs:
+            if not token.is_stop and not token.is_punct and not token.is_space:
+                tokens.append(token.text)      # original
+                if token.lemma_ != token.text: # only add lemma if different
+                    tokens.append(token.lemma_)
         tokenized_query =tokens
+        print(tokens)
         if not tokenized_query:
             logger.warning("Query tokenized to empty list")
             return []

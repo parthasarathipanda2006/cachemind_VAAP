@@ -2,6 +2,7 @@ from core.hot_storage import HotStorage
 from core.cold_storage import ColdStorage
 from core.embedding_model import embedding_model
 from core.policy import LRUPolicy
+from chatbot import chatbot
 
 # Initialize storages
 cold_storage = ColdStorage(
@@ -20,6 +21,7 @@ hot_storage = HotStorage(
 policy = LRUPolicy(max_cache_size=10)
 
 while True:
+    context=[]
     query = input("tell me your Query:\n")
     if query == "exit":
         break
@@ -31,19 +33,26 @@ while True:
     hit_found = False
     if hot_results:
         for res in hot_results:
-            if res.get('similarity', 0) > 0.3:
+            if res.get('similarity', 0) > 0.5:
                 hit_found = True
-                break
 
     if hit_found:
         # CACHE HIT - never touches cold store
         print("CACHE HIT ✅")
         # Update recency for each hit document
-        for res in hot_results:
-            doc_id = res['id']
-            policy.record_access(doc_id)
-            print(res['text'])
-
+        for res in reversed(hot_results):
+            if res.get('similarity', 0) > 0.3:
+                #print(res['text'])
+                doc_id = res['id']
+                if res.get('similarity', 0) > 0.3:
+                    policy.record_access(doc_id)
+                    context.append(res["text"])
+            else:
+                doc_id = res['id']
+                print(res["similarity"])
+                hot_storage.delete_document(doc_id)
+                policy.remove(doc_id)
+        
     else:
         # CACHE MISS - go to cold store
         print("CACHE MISS ❌")
@@ -57,11 +66,10 @@ while True:
             top_doc = result
             doc_id = str(top_doc.id)
             doc_text = top_doc.text
-            print("\n",doc_text,"\n")
+            #print("\n",doc_text,"\n")
             # Check if document is already in hot cache (shouldn't be on miss, but safeguard)
             if policy.contains(doc_id):
-                print(f"Document {doc_id} already in cache, updating access")
-                policy.record_access(doc_id)
+                pass 
             else:
                 # If cache is full, evict least recently used document
                 if policy.is_full():
@@ -77,15 +85,30 @@ while True:
                 policy.admit(doc_id)
                 print(f"Admitted new document: {doc_id}")
 
-    # Final search to display results (keeping original logic for compatibility)
-    result = hot_storage.search(
-        query=query,
-        top_k=5
-    )
-    k = False
-    for i, res in enumerate(result, 1):
-        if res["similarity"] > 0.5:
-            print(f"{i}. ID: {res['id']}")
-            print(f"   Text: {res['text']}")
-            print(f"   similarity: {res['similarity']}")
+        result = hot_storage.search(
+            query=query,
+            top_k=5
+        )
+        for res in reversed(result):
+            if res.get('similarity', 0) > 0.3:
+                #print(res['text'])
+                doc_id = res['id']
+                if res.get('similarity', 0) > 0.3:
+                    policy.record_access(doc_id)
+                    context.append(res["text"])
+            else:
+                doc_id = res['id']
+                hot_storage.delete_document(doc_id)
+                print(res["similarity"])
+                policy.remove(doc_id)
+
+    if context==[]:
+        print("No valid results found in cold storage.")
+        continue
+    response = chatbot.invoke({
+        "context":  "\n".join(context),
+        "question": query
+    })
+    print(response.content)
+
 cold_storage.close()
