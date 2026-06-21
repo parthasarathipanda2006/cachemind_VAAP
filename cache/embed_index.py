@@ -91,7 +91,7 @@ class EmbedIndex:
         self,
         query_norm : np.ndarray,
         top_k      : int   = 10,
-        threshold  : float = 0.68,
+        threshold  : float = 0.3,
     ) -> list[tuple[str, float]]:
         """
         Cosine similarity search over active docs.
@@ -114,11 +114,11 @@ class EmbedIndex:
         k       = min(top_k, len(doc_ids))
         top_idx = np.argpartition(sims, -k)[-k:]
         top_idx = top_idx[np.argsort(sims[top_idx])[::-1]]
-
+        print(sims)
         return [
             (doc_ids[i], float(sims[i]))
             for i in top_idx
-            if float(sims[i]) >= threshold
+            if float(sims[i]) >= 0.5
         ]
 
     # ─────────────────────────────────────────────────────────────

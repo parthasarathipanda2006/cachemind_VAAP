@@ -189,7 +189,7 @@ class SCRLCache:
                     self._hit_update(doc_id)
         else:
             self.misses += 1
-
+        
         return results
 
     # ─────────────────────────────────────────────────────────────
